@@ -4,7 +4,10 @@ namespace RestaurantAPI.Entities;
 
 public class RestaurantDBContext : DbContext
 {
-    private string _connectionString = "Server=localhost,1433;Database=Restaurants;User Id=sa;Password=Database!2023;Trusted_Connection=False;TrustServerCertificate=True;";
+    public RestaurantDBContext(DbContextOptions<RestaurantDBContext> options) : base(options)
+    {
+    }
+
     public DbSet<Restaurant> Restaurants { get; set; }
     public DbSet<Address> Addresses { get; set; }
     public DbSet<Dish> Dishes { get; set; }
@@ -34,10 +37,5 @@ public class RestaurantDBContext : DbContext
         modelBuilder.Entity<Role>()
             .Property(r => r.Name)
             .IsRequired();
-    }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        optionsBuilder.UseSqlServer(_connectionString);
     }
 }

@@ -10,8 +10,9 @@ public class Restaurant
     public string? ContactEmail { get; set; }
     public string? ContactNumber { get; set; }
     public int? AddressId { get; set; }
+    public int? CreatedById { get; set; }
 
+    public virtual User CreatedBy { get; set; }
     public virtual Address Address { get; set; } // tworzenie relacji do tabeli Address
-
     public virtual List<Dish> Dishes { get; set; } // tworzenie relacji do tabeli Dishes
 }

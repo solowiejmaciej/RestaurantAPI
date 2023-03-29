@@ -59,13 +59,18 @@ public class AccountService : IAccountService
         }
 
         var claims = new List<Claim>() // Tworzenie calimow do wygenerowania JWT
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
+                new Claim(ClaimTypes.Role, $"{user.Role.Name}"),
+                new Claim("DateOfBirth", $"{user.Birthday.Value.ToString("yyyy-MM-dd")}"),
+            };
+
+        if (!user.Nationality.IsNullOrEmpty())
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
-            new Claim(ClaimTypes.Role, $"{user.Role.Name}"),
-            new Claim("DateOfBirth", $"{user.Birthday.Value.ToString("yyyy-MM-dd")}"),
-            new Claim("Nationality", user.Nationality)
-        };
+            claims.Add(new Claim("Nationality", user.Nationality));
+        }
+
         // Klucz na podstawie jakiego ma byc wygenerowane jwt
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_authSettings.JwtKey));
         // Algorytm szyfrowania

@@ -1,4 +1,5 @@
-﻿using AutoMapper;
+﻿using System.Security.Claims;
+using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,12 +16,13 @@ public class RestaurantController : Controller
 {
     private readonly IRestaurantService _restaurantService;
 
-    public RestaurantController(IRestaurantService restaurantService)
+    public RestaurantController(IRestaurantService restaurantService, IAuthorizationService authorizationService)
     {
         _restaurantService = restaurantService;
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin,Manager")]
     public ActionResult CreateNewRestaurant([FromBody] CreateRestuarantDto newRestaurantDto)
     {
         var newRestaurantId = _restaurantService.CreateNewRestaurant(newRestaurantDto);
@@ -44,9 +46,10 @@ public class RestaurantController : Controller
     }
 
     [HttpGet]
-    public ActionResult<IEnumerable<RestaurantDto>> GetAllRestaurants()
+    [Authorize(Policy = "Atleast20")]
+    public ActionResult<IEnumerable<RestaurantDto>> GetAllRestaurants([FromQuery] GetAllRestaruantQuery query)
     {
-        var restaurantsDtos = _restaurantService.GetAllRestaurants();
+        var restaurantsDtos = _restaurantService.GetAllRestaurants(query);
 
         return Ok(restaurantsDtos);
     }

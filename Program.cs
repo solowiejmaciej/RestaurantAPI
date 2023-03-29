@@ -12,6 +12,9 @@ using RestaurantAPI.Models;
 using RestaurantAPI.Models.Validators;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
+using RestaurantAPI.Authorization;
 
 namespace RestaurantAPI
 {
@@ -48,11 +51,18 @@ namespace RestaurantAPI
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authSettings.JwtKey)),
                 };
             });
-
+            builder.Services.AddAuthorization(option =>
+            {
+                option.AddPolicy("HasNationality", builder => builder.RequireClaim("Nationality"));
+                option.AddPolicy("Atleast20", builder => builder.AddRequirements(new MinAgeRequirement(20)));
+            });
+            builder.Services.AddScoped<IAuthorizationHandler, MinAgeRequirementHandler>();
+            builder.Services.AddScoped<IAuthorizationHandler, ResourceOperationRequirementHandler>();
             //Dodanie kontrolerów
             builder.Services.AddControllers();
             //Dodanie Bazy danych
-            builder.Services.AddDbContext<RestaurantDBContext>();
+            builder.Services.AddDbContext<RestaurantDBContext>(options => options.UseSqlServer(
+                builder.Configuration.GetConnectionString("RestaruantDb")));
             //Zarejestrowanie seedera
             builder.Services.AddScoped<RestaurantSeederService>();
             //Zarejestrowanie RestaurantService
@@ -67,14 +77,32 @@ namespace RestaurantAPI
             //Dodanie FluentValidation
             builder.Services.AddFluentValidationAutoValidation();
             builder.Services.AddScoped<IValidator<RegisterUserDto>, RegisterUserDtoValidator>();
+            builder.Services.AddScoped<IValidator<GetAllRestaruantQuery>, RestaruantQuerryValidator>();
             //Dodanie Nloga
             builder.Host.UseNLog();
             //Dodanie Middleware ErrorHandlingMiddleware
             builder.Services.AddScoped<ErrorHandlingMiddleware>();
 
+            // Dziêki temu mo¿emy mieæ kontekst usera poza kontrolerami
+            builder.Services.AddScoped<IUserContextService, UserContextService>();
+            builder.Services.AddHttpContextAccessor();
+
+            var allowedOrigins = builder.Configuration["AllowedOrigins"];
+
             builder.Services.AddSwaggerGen();
+            builder.Services.AddCors(options =>
+                options.AddPolicy("FrontendClient", builder =>
+                    builder.AllowAnyOrigin()
+                        .AllowAnyHeader()
+                        .WithOrigins(allowedOrigins)
+                )
+            );
 
             var app = builder.Build();
+            app.UseResponseCaching();
+            app.UseStaticFiles();
+
+            app.UseCors("FrontendClient");
 
             app.UseMiddleware<ErrorHandlingMiddleware>();
 

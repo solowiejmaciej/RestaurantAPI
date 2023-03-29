@@ -1,5 +1,9 @@
-﻿using AutoMapper;
+﻿using System.Linq.Expressions;
+using System.Security.Claims;
+using AutoMapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using RestaurantAPI.Authorization;
 using RestaurantAPI.Entities;
 using RestaurantAPI.Exceptions;
 using RestaurantAPI.Models;
@@ -11,12 +15,17 @@ public class RestaurantService : IRestaurantService
     private readonly RestaurantDBContext _dbContext;
     private readonly IMapper _mapper;
     private readonly ILogger _logger;
+    private readonly IAuthorizationService _authorizationService;
+    private readonly IUserContextService _userContextService;
 
-    public RestaurantService(RestaurantDBContext dbContext, IMapper mapper, ILogger<RestaurantService> logger)// Wstrzykiwanie zaleznosci poprzez konstruktor
+    public RestaurantService(RestaurantDBContext dbContext, IMapper mapper, ILogger<RestaurantService> logger,
+        IAuthorizationService authorizationService, IUserContextService userContextService)// Wstrzykiwanie zaleznosci poprzez konstruktor
     {
         _logger = logger;
         _mapper = mapper;
         _dbContext = dbContext;
+        _authorizationService = authorizationService;
+        _userContextService = userContextService;
     }
 
     public RestaurantDto GetRestaurantById(int id)
@@ -34,22 +43,50 @@ public class RestaurantService : IRestaurantService
         return restaurantDtos;
     }
 
-    public IEnumerable<RestaurantDto> GetAllRestaurants()
+    public PageResult<RestaurantDto> GetAllRestaurants(GetAllRestaruantQuery? query)
     {
-        var restaurants = _dbContext //szukanie restauracji po id
+        var baseQuery = _dbContext //szukanie restauracji po id
             .Restaurants
             .Include(r => r.Address)
             .Include(r => r.Dishes)
+            .Where(r => query.SearchPhrase == null ||
+                        (r.Name.ToLower().Contains(query.SearchPhrase.ToLower())
+                         || r.Description.ToLower().Contains(query.SearchPhrase.ToLower())));
+
+        if (!string.IsNullOrEmpty(query.SortBy))
+        {
+            var columnsSelectors = new Dictionary<string, Expression<Func<Restaurant, object>>>
+            {
+                {nameof(Restaurant.Name), r => r.Name},
+                {nameof(Restaurant.Description), r => r.Description},
+                {nameof(Restaurant.Category), r => r.Category},
+            };
+
+            var selectedColumn = columnsSelectors[query.SortBy];
+
+            baseQuery = query.SortDirection == SortDirection.ASC
+                ? baseQuery.OrderBy(selectedColumn)
+                : baseQuery.OrderByDescending(selectedColumn);
+        }
+
+        var restaurants = baseQuery
+            .Skip(query.PageSize * (query.PageNumber - 1)) //Paginacja
+            .Take(query.PageSize)
             .ToList();
 
         var restaurantsDtos = _mapper.Map<List<RestaurantDto>>(restaurants);
 
-        return restaurantsDtos;
+        var totalItemsCount = baseQuery.Count();
+
+        var result = new PageResult<RestaurantDto>(restaurantsDtos, totalItemsCount, query.PageSize, query.PageNumber);
+
+        return result;
     }
 
     public int CreateNewRestaurant(CreateRestuarantDto restaurantDto)
     {
         var restaurant = _mapper.Map<Restaurant>(restaurantDto);
+        restaurant.CreatedById = _userContextService.GetUserId;
         _dbContext.Add(restaurant);
         _dbContext.SaveChanges();
         return restaurant.Id;
@@ -63,7 +100,14 @@ public class RestaurantService : IRestaurantService
             .Restaurants
             .FirstOrDefault(r => r.Id == id);
 
-        if (restaurant == null) throw new NotFoundException("Restaurant not found"); ;
+        if (restaurant == null) throw new NotFoundException("Restaurant not found");
+
+        var authorizationResult = _authorizationService.AuthorizeAsync(_userContextService.User, restaurant, new ResourceOperationRequirement(ResourceOperation.Delete)).Result;
+
+        if (!authorizationResult.Succeeded)
+        {
+            throw new ForbidException();
+        }
 
         _dbContext.Restaurants.Remove(restaurant);
         _dbContext.SaveChanges();
@@ -76,6 +120,13 @@ public class RestaurantService : IRestaurantService
             .FirstOrDefault(r => r.Id == id);
 
         if (restaurant is null) throw new NotFoundException("Restaurant not found");
+
+        var authorizationResult = _authorizationService.AuthorizeAsync(_userContextService.User, restaurant, new ResourceOperationRequirement(ResourceOperation.Update)).Result;
+
+        if (!authorizationResult.Succeeded)
+        {
+            throw new ForbidException();
+        }
 
         restaurant.Name = newRestaurantDto.Name;
         restaurant.Description = newRestaurantDto.Description;
