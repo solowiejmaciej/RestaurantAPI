@@ -1,9 +1,5 @@
-﻿using System.Security.Claims;
-using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using RestaurantAPI.Entities;
 using RestaurantAPI.Models;
 using RestaurantAPI.Services;
 
@@ -46,7 +42,6 @@ public class RestaurantController : Controller
     }
 
     [HttpGet]
-    [Authorize(Policy = "Atleast20")]
     public ActionResult<IEnumerable<RestaurantDto>> GetAllRestaurants([FromQuery] GetAllRestaruantQuery query)
     {
         var restaurantsDtos = _restaurantService.GetAllRestaurants(query);
@@ -54,6 +49,7 @@ public class RestaurantController : Controller
         return Ok(restaurantsDtos);
     }
 
+    [Authorize(Policy = "Atleast20")]
     [HttpGet("{id}")]
     public ActionResult<RestaurantDto> GetOneRestaurantById([FromRoute] int id) // parametr ze ścieżki
     {
